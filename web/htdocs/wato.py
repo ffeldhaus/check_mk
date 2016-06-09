@@ -4295,6 +4295,9 @@ def mode_changelog(phase):
                         html.makeactionuri([("_action", "discard")]),
                                      "discard", id="discard_changes_button")
 
+        html.context_button(_("Snapshots"), folder_preserving_link([("mode", "snapshot")]),
+                            "snapshot")
+
         if is_distributed():
             html.context_button(_("Site Configuration"), folder_preserving_link([("mode", "sites")]), "sites")
 
@@ -5241,7 +5244,7 @@ def extract_snapshot(snapshot_file):
 
 def mode_snapshot(phase):
     if phase == "title":
-        return _("Backup & Restore")
+        return _("Config snapshots")
     elif phase == "buttons":
         home_button()
         changelog_button()
