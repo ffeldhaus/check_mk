@@ -3672,3 +3672,21 @@ class Color(ValueSpec):
     def validate_value(self, value, varprefix):
         if not self._allow_empty and not value:
             raise MKUserError(varprefix, _("You need to select a color."))
+
+
+
+def SchedulePeriod():
+    return \
+        CascadingDropdown(
+            title = _("Period"),
+            orientation = "horizontal",
+            choices = [
+                ( "day",   _("Every day"), ),
+                ( "week",  _("Every week on..."),
+                  Weekday(title = _("Day of the week"))),
+                ( "month_begin", _("At the beginning of every month at day"),
+                  Integer(minvalue=1, maxvalue=28)),
+                ( "month_end", _("At the end of every month at day"),
+                  Integer(minvalue=1, maxvalue=28, unit=_("from the end"))),
+            ]
+        )
