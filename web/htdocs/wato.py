@@ -8252,17 +8252,6 @@ def FolderChoice(**kwargs):
     return DropdownChoice(**kwargs)
 
 
-class GroupChoice(DualListChoice):
-    def __init__(self, what, **kwargs):
-        DualListChoice.__init__(self, **kwargs)
-        self.what = what
-        self._choices = lambda: self.load_groups()
-
-    def load_groups(self):
-        all_groups = userdb.load_group_information()
-        this_group = all_groups.get(self.what, {})
-        return [ (k, t['alias'] and t['alias'] or k) for (k, t) in this_group.items() ]
-
 def vs_notification_bulkby():
     return ListChoice(
       title = _("Create separate notification bulks based on"),
@@ -8400,7 +8389,7 @@ def vs_notification_rule(userid = None):
                   title = _("Match Host Tags"))
             ),
             ( "match_hostgroups",
-              GroupChoice("host",
+              userdb.GroupChoice("host",
                   title = _("Match Host Groups"),
                   help = _("The host must be in one of the selected host groups"),
                   allow_empty = False,
@@ -8435,14 +8424,14 @@ def vs_notification_rule(userid = None):
               )
             ),
             ( "match_servicegroups",
-              GroupChoice("service",
+              userdb.GroupChoice("service",
                   title = _("Match Service Groups"),
                   help = _("The service must be in one of the selected service groups"),
                   allow_empty = False,
               )
             ),
             ( "match_contactgroups",
-              GroupChoice("contact",
+              userdb.GroupChoice("contact",
                   title = _("Match Contact Groups (CMC only)"),
                   help = _("The host/service must be in one of the selected contact groups. This only works with Check_MK Micro Core. " \
                            "If you don't use the CMC that filter will not apply"),
