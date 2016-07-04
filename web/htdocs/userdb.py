@@ -142,6 +142,25 @@ def user_locked(username):
     users = load_users()
     return users[username].get('locked', False)
 
+
+def login_session_timed_out(username, last_activity):
+    idle_timeout = load_custom_attr(username, "idle_timeout", convert_idle_timeout, None)
+    if idle_timeout == None:
+        idle_timeout = config.user_idle_timeout
+
+    if idle_timeout in [ None, False ]:
+        return False # no timeout activated at all
+
+    timed_out = (time.time() - last_activity) > idle_timeout
+
+    # TODO: Reenable this for easier debugging when log levels can be configured easily
+    #if timed_out:
+    #    html.log("%s login session timed out (Inactive for %d seconds)" %
+    #                                (username, time.time() - last_activity))
+
+    return timed_out
+
+
 def update_user_access_time(username):
     if not config.save_user_access_times:
         return
@@ -348,6 +367,7 @@ def load_users(lock = False):
                         ('last_pw_change',    saveint),
                         ('last_seen',         savefloat),
                         ('enforce_pw_change', lambda x: bool(saveint(x))),
+                        ('idle_timeout',      convert_idle_timeout),
                     ]:
                     val = load_custom_attr(id, attr, conv_func)
                     if val != None:
@@ -385,6 +405,13 @@ def save_custom_attr(userid, key, val):
     make_nagios_directory(basedir)
     create_user_file('%s/%s.mk' % (basedir, key), 'w').write('%s\n' % val)
 
+def remove_custom_attr(userid, key):
+    basedir = defaults.var_dir + "/web/" + userid
+    try:
+        os.unlink('%s/%s.mk' % (basedir, key))
+    except OSError:
+        pass # Ignore non existing files
+
 def get_online_user_ids():
     online_threshold = time.time() - config.user_online_maxage
     users = []
@@ -420,6 +447,7 @@ def save_users(profiles):
         "enforce_pw_change",
         "last_pw_change",
         "last_seen",
+        "idle_timeout",
     ] + multisite_custom_values
 
     # Keys to put into multisite configuration
@@ -507,6 +535,11 @@ def save_users(profiles):
         save_custom_attr(id, 'enforce_pw_change', str(int(user.get('enforce_pw_change', False))))
         save_custom_attr(id, 'last_pw_change', str(user.get('last_pw_change', int(time.time()))))
 
+        if "idle_timeout" in user:
+            save_custom_attr(user_id, "idle_timeout", user["idle_timeout"])
+        else:
+            remove_custom_attr(user_id, "idle_timeout")
+
         # Write out the last seent time
         if 'last_seen' in user:
             save_custom_attr(id, 'last_seen', repr(user['last_seen']))
@@ -540,6 +573,10 @@ def save_users(profiles):
 
     # Call the users_saved hook
     hooks.call("users-saved", profiles)
+
+
+def convert_idle_timeout(value):
+    return value != "False" and int(value) or False
 
 #.
 #   .-Roles----------------------------------------------------------------.
