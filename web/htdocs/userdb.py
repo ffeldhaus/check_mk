@@ -827,7 +827,10 @@ class GroupChoice(DualListChoice):
 # Maybe we need to change it to livestatus or change our data structures somehow in the future.
 def groups_of_user(user_id):
     users = load_users(lock=False)
-    return users[user_id]["contactgroups"]
+    if user_id not in users:
+        return []
+    else:
+        return users[user_id].get("contactgroups", [])
 
 #.
 #   .-Custom-Attrs.--------------------------------------------------------.
