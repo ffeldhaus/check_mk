@@ -2881,6 +2881,7 @@ def diag_host_tests():
         ('snmpv1',        _('SNMPv1')),
         ('snmpv2',        _('SNMPv2c')),
         ('snmpv2_nobulk', _('SNMPv2c (without Bulkwalk)')),
+        ('snmpv3',        _('SNMPv3')),
         ('traceroute',    _('Traceroute')),
     ]
 
@@ -2916,10 +2917,13 @@ def mode_diag_host(phase):
                 title = _('IP address'),
                 allow_empty = False
             )),
-            ('snmp_community', TextAscii(
-                title = _("SNMP Community"),
+            ('snmp_community', Password(
+                title = _("SNMPv1/2 community"),
                 allow_empty = False
             )),
+            ('snmp_v3_credentials',
+                SNMPCredentials(default_value = None, only_v3 = True)
+            ),
         ]
     )
 
@@ -2986,6 +2990,25 @@ def mode_diag_host(phase):
                 host['ipaddress'] = new['ipaddress']
             if 'snmp_community' in new:
                 host['snmp_community'] = new['snmp_community']
+
+
+            # If both snmp types have credentials set - snmpv3 takes precedence
+            return_message = []
+            if "ipaddress" in new:
+                return_message.append(_("IP address"))
+                host['ipaddress'] = new['ipaddress']
+            if "snmp_v3_credentials" in new:
+                if "snmp_community" in new:
+                    return_message.append(_("SNMPv3 credentials (SNMPv2 community was discarded)"))
+                else:
+                    return_message.append(_("SNMPv3 credentials"))
+                host["snmp_community"] = new["snmp_v3_credentials"]
+            elif "snmp_community" in new:
+                return_message.append(_("SNMP credentials"))
+                host["snmp_community"] = new["snmp_community"]
+
+            return_message = _("Updated attributes: ") + ", ".join(return_message)
+
             log_pending(AFFECTED, hostname, "edit-host", _("Edited properties of host via diagnose [%s]") % hostname)
             save_folder_and_hosts(g_folder)
             reload_hosts(g_folder)
@@ -2995,7 +3018,7 @@ def mode_diag_host(phase):
             html.set_var("host", hostname)
             html.set_var("folder", g_folder[".path"])
 
-            return "edithost"
+            return "edithost", return_message
         return
 
     html.write('<div class="diag_host">')
@@ -3004,7 +3027,19 @@ def mode_diag_host(phase):
     forms.header(_('Host Properties'))
 
     forms.section(legend = False)
-    vs_host.render_input("vs_host", host)
+    # The diagnose page shows both snmp variants at the same time
+    # We need to analyse the preconfigured community and set either the
+    # snmp_community or the snmp_v3_credentials
+    vs_dict = {}
+    for key, value in host.items():
+        if key[0] == ".":
+            continue
+        if key == "snmp_community" and type(value) == tuple:
+            vs_dict["snmp_v3_credentials"] = value
+            continue
+        vs_dict[key] = value
+
+    vs_host.render_input("vs_host", vs_dict)
     html.help(vs_host.help())
 
     forms.end()
@@ -3035,6 +3070,8 @@ def mode_diag_host(phase):
                        'connection options you like to try on the right side of the screen and '
                        'press the "Test" button. The results will be displayed here.'))
     else:
+        # TODO: Insert any vs_host valuespec validation
+        #       These tests can be called with invalid valuespec settings...
         for ident, title in diag_host_tests():
             html.write('<h3>%s</h3>' % title)
             html.write('<table class="data test"><tr class="data odd0">')
@@ -3076,14 +3113,32 @@ def ajax_diag_host():
         # Execute a specific test
         if _test not in dict(diag_host_tests()).keys():
             raise MKGeneralException(_('Invalid test.'))
-        args = [
-            html.var('ipaddress'),
-            html.var('snmp_community'),
-            html.var('agent_port'),
-            html.var('snmp_timeout'),
-            html.var('snmp_retries'),
-            html.var('datasource_program'),
-        ]
+
+        args = [""] * 12
+        for idx, what in enumerate ([ 'ipaddress',
+                                      'snmp_community',
+                                      'agent_port',
+                                      'snmp_timeout',
+                                      'snmp_retries',
+                                      'datasource_program' ]):
+            args[idx] = html.var(what, "")
+
+        if html.var("snmpv3_use"):
+            snmpv3_use = { "0": "noAuthNoPriv",
+                           "1": "authNoPriv",
+                           "2": "authPriv",
+                         }.get(html.var("snmpv3_use"))
+            args[6] = snmpv3_use
+            if snmpv3_use != "noAuthNoPriv":
+                snmpv3_auth_proto = { "0": "md5", "1": "sha" }.get(html.var("snmpv3_auth_proto"))
+                args[7] = snmpv3_auth_proto
+                args[8] = html.var("snmpv3_security_name")
+                args[9] = html.var("snmpv3_security_password")
+                if snmpv3_use == "authPriv":
+                    snmpv3_privacy_proto = { "0": "DES", "1": "AES" }.get(html.var("snmpv3_privacy_proto"))
+                    args[10] = snmpv3_privacy_proto
+                    args[11] = html.var("snmpv3_privacy_password")
+
         result = check_mk_automation(host[".siteid"], "diag-host", [hostname, _test] + args)
         # API is defined as follows: Two data fields, separated by space.
         # First is the state: 0 or 1, 0 means success, 1 means failed.
